@@ -1,0 +1,129 @@
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  YOUTH
+  INSTRUCTOR
+  ADMIN
+}
+
+enum ApplicationStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  CANCELLED
+}
+
+model User {
+  id                   Int           @id @default(autoincrement())
+  fullName             String
+  username             String        @unique
+  email                String        @unique
+  password             String
+  role                 Role          @default(YOUTH)
+  isActive             Boolean       @default(true)
+  programs             Program[]     @relation("InstructorPrograms")
+  applications         Application[] @relation("ApplicantApplications")
+  reviewedApplications Application[] @relation("ReviewedApplications")
+  announcements        Announcement[]
+  authSessions         AuthSession[]
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+}
+
+// جلسات تسجيل الدخول (refresh tokens)
+model AuthSession {
+  id               Int       @id @default(autoincrement())
+  userId           Int
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokenHash String
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model Program {
+  id             Int               @id @default(autoincrement())
+  title          String
+  description    String
+  image          String?
+  totalSeats     Int
+  availableSeats Int
+  instructorId   Int
+  instructor     User              @relation("InstructorPrograms", fields: [instructorId], references: [id], onDelete: Restrict)
+  sessions       ProgramSession[]
+  applications   Application[]
+  materials      ProgramMaterial[]
+  announcements  Announcement[]
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([instructorId])
+  @@index([title])
+}
+
+// جلسات البرنامج التدريبي (موعد + مكان/رابط)
+model ProgramSession {
+  id             Int      @id @default(autoincrement())
+  programId      Int
+  program        Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  title          String?
+  date           DateTime
+  locationOrLink String
+  createdAt      DateTime @default(now())
+
+  @@index([programId, date])
+}
+
+model Application {
+  id           Int               @id @default(autoincrement())
+  userId       Int
+  user         User              @relation("ApplicantApplications", fields: [userId], references: [id], onDelete: Cascade)
+  programId    Int
+  program      Program           @relation(fields: [programId], references: [id], onDelete: Cascade)
+  cvPath       String
+  status       ApplicationStatus @default(PENDING)
+  reviewedById Int?
+  reviewedBy   User?             @relation("ReviewedApplications", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt   DateTime?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@unique([userId, programId])
+  @@index([programId, status])
+}
+
+model ProgramMaterial {
+  id           Int      @id @default(autoincrement())
+  programId    Int
+  program      Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  title        String
+  filePath     String
+  originalName String
+  mimeType     String
+  createdAt    DateTime @default(now())
+
+  @@index([programId])
+}
+
+// programId = null  => إعلان عام (أدمن) ، غير ذلك => إعلان خاص ببرنامج (مشرف)
+model Announcement {
+  id        Int      @id @default(autoincrement())
+  title     String
+  content   String
+  programId Int?
+  program   Program? @relation(fields: [programId], references: [id], onDelete: Cascade)
+  authorId  Int
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([programId])
+}
